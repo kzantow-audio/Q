@@ -1,5 +1,5 @@
 /*=============================================================================
-   Copyright (c) 2014-2019 Joel de Guzman. All rights reserved.
+   Copyright (c) 2014-2023 Joel de Guzman. All rights reserved.
 
    Distributed under the MIT License [ https://opensource.org/licenses/MIT ]
 =============================================================================*/
@@ -29,7 +29,7 @@ namespace cycfi::q
       return _wav;
    }
 
-   std::size_t wav_base::sps() const
+   float wav_base::sps() const
    {
       if (_wav)
          return _wav->sampleRate;
@@ -41,14 +41,14 @@ namespace cycfi::q
       if (_wav)
          return _wav->channels;
       return 0;
-}
+   }
 
    wav_reader::wav_reader(char const* filename)
    {
       _wav = static_cast<wav_impl*>(drwav_open_file(filename));
    }
 
-   std::size_t wav_reader::length() const
+   std::uint64_t wav_reader::length() const
    {
       if (_wav)
          return _wav->totalSampleCount;
@@ -62,9 +62,31 @@ namespace cycfi::q
       return 0;
    }
 
+
+   bool wav_reader::restart()
+   {
+      if (_wav)
+         return drwav_seek_to_first_sample(_wav);
+      return false;
+   }
+
+   std::uint64_t wav_reader::position()
+   {
+      if (_wav)
+         return _wav->totalSampleCount - (_wav->bytesRemaining / _wav->bytesPerSample);
+      return 0;
+   }
+
+   bool wav_reader::seek(std::uint64_t target)
+   {
+      if (_wav)
+         return drwav_seek_to_sample(_wav, target);
+      return false;
+   }
+
    wav_writer::wav_writer(
       char const* filename
-    , std::uint32_t num_channels, std::uint32_t sps)
+    , std::uint32_t num_channels, float sps)
    {
 	   drwav_data_format format;
       format.container = drwav_container_riff;

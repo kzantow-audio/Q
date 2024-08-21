@@ -1,5 +1,5 @@
 /*=============================================================================
-   Copyright (c) 2014-2019 Joel de Guzman. All rights reserved.
+   Copyright (c) 2014-2023 Joel de Guzman. All rights reserved.
 
    Distributed under the MIT License [ https://opensource.org/licenses/MIT ]
 =============================================================================*/
@@ -7,7 +7,8 @@
 #include <q_io/audio_file.hpp>
 #include <q/fx/lowpass.hpp>
 #include <q/fx/envelope.hpp>
-#include <q/fx/feature_detection.hpp>
+#include <q/fx/signal_conditioner.hpp>
+#include <q/fx/peak.hpp>
 #include <vector>
 
 namespace q = cycfi::q;
@@ -19,14 +20,10 @@ void process(std::string name, q::frequency cutoff)
    // Read audio file
 
    q::wav_reader src{"audio_files/" + name + ".wav"};
-   std::uint32_t const sps = src.sps();
+   float const sps = src.sps();
 
    std::vector<float> in(src.length());
    src.read(in);
-
-   auto max_val = *std::max_element(in.begin(), in.end(),
-      [](auto a, auto b) { return std::abs(a) < std::abs(b); }
-   );
 
    ////////////////////////////////////////////////////////////////////////////
    // Detect waveform peaks
@@ -35,17 +32,17 @@ void process(std::string name, q::frequency cutoff)
    std::vector<float> out(src.length() * n_channels);
    auto i = out.begin();
 
-   q::one_pole_lowpass lp{ cutoff, sps };
-   q::peak pk{ 0.7f, -60_dB };
-   q::peak_envelope_follower env{ cutoff.period() * 5, sps };
+   auto sc_conf = q::signal_conditioner::config{};
+   q::frequency f = cutoff/4;
+   auto sig_cond = q::signal_conditioner{sc_conf, f, f*4, sps};
+
+   q::peak pk{ 0.95f, -40_dB };
+   q::peak_envelope_follower env{ cutoff.period()*16, sps };
 
    for (auto s : in)
    {
-      // Normalize
-      s *= 1.0 / max_val;
-
-      // Low pass
-      s = lp(s);
+      // Signal conditioner
+      s = sig_cond(s);
       *i++ = s;
 
       *i++ = pk(s, env(s)) * 0.8;
@@ -75,6 +72,10 @@ int main()
    process("5b-B-12th", 987.76_Hz);
    process("6a-High-E", 1318.52_Hz);
    process("6b-High-E-12th", 1318.52_Hz);
+
+   process("Tapping D", 587.32_Hz);
+   process("Hammer-Pull High E", 1318.52_Hz);
+
    return 0;
 }
 

@@ -1,5 +1,5 @@
 /*=============================================================================
-   Copyright (c) 2014-2021 Joel de Guzman. All rights reserved.
+   Copyright (c) 2014-2024 Joel de Guzman. All rights reserved.
 
    Distributed under the MIT License [ https://opensource.org/licenses/MIT ]
 =============================================================================*/
@@ -20,7 +20,7 @@
 #include <fstream>
 #include <chrono>
 
-#include "notes.hpp"
+#include "pitch.hpp"
 
 namespace q = cycfi::q;
 using namespace q::literals;
@@ -93,7 +93,7 @@ void process(
    // Read audio file
 
    q::wav_reader src{"audio_files/" + name + ".wav"};
-   std::uint32_t const sps = src.sps();
+   float const sps = src.sps();
 
    std::vector<float> in(src.length());
    src.read(in);
@@ -121,8 +121,8 @@ void process(
    q::compressor              comp{ -18_dB, slope };
    q::clip                    clip;
 
-   float                      onset_threshold = as_float(-28_dB);
-   float                      release_threshold = as_float(-60_dB);
+   float                      onset_threshold = lin_float(-28_dB);
+   float                      release_threshold = lin_float(-60_dB);
    float                      threshold = onset_threshold;
 
    std::uint64_t              nanoseconds = 0;
@@ -146,12 +146,12 @@ void process(
 
       // Envelope
       auto e = env(std::abs(s));
-      auto e_db = q::decibel(e);
+      auto e_db = q::lin_to_db(e);
 
       if (e > threshold)
       {
          // Compressor + makeup-gain + hard clip
-         auto gain = as_float(comp(e_db)) * makeup_gain;
+         auto gain = lin_float(comp(e_db)) * makeup_gain;
          s = clip(s * gain);
          threshold = release_threshold;
       }
@@ -175,6 +175,7 @@ void process(
 
       out[ch2] = -0.8;  // placeholder for bitset bits
       out[ch3] = 0.0f;  // placeholder for autocorrelation results
+      out[ch4] = -0.8;  // placeholder for frequency
 
       if (ready)
       {
@@ -211,12 +212,17 @@ void process(
             auto fr = pd.frames_after_shift();
             csv << f << ", " << f2 << ", " << p << ", " << fr << ", " << time << std::endl;
          }
-      }
 
-      // Print the frequency
-      {
-         auto f = pd.get_frequency() / as_double(highest_freq);
-         out[ch4] = f;
+         // Print the frequency
+         {
+            auto f = pd.get_frequency() / as_double(highest_freq);
+            auto out_i = (&out[ch4] - (((size-1) + extra) * n_channels));
+            for (auto i = 0; i != size; ++i)
+            {
+               *out_i = f;
+               out_i += n_channels;
+            }
+         }
       }
 
       // Print the predicted frequency
